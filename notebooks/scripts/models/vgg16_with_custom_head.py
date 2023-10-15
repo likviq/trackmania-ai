@@ -1,10 +1,12 @@
 import torch.nn as nn
 import torchvision.models as models
+from torchvision.models.vgg import VGG16_Weights
 
 class Vgg16CustomHead(nn.Module):
     def __init__(self):
         super(Vgg16CustomHead, self).__init__()
-        vgg16 = models.vgg16(pretrained=True)
+        self.weights = VGG16_Weights.DEFAULT
+        vgg16 = models.vgg16(weights=self.weights)
 
         self.vgg16 = nn.Sequential(*list(vgg16.children())[:-1])
         
