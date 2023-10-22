@@ -12,6 +12,20 @@ from data_preparation.dataset_prep_main import DatasetPreparation
 sys.path.append('models')
 from models.vgg16_with_custom_head import Vgg16CustomHead
 
+import wandb
+wandb.init(
+    # set the wandb project where this run will be logged
+    project="trackmania-ai",
+    
+    # track hyperparameters and run metadata
+    config={
+    "learning_rate": 0.0001,
+    "architecture": "VGG16",
+    "dataset": "3-min-trackmania-map",
+    "epochs": 100,
+    }
+)
+
 class Trainer:
     def __init__(self, df_path):
 
@@ -50,6 +64,9 @@ class Trainer:
         train_loss = []
 
         for epoch in tqdm(range(num_epochs)):
+            running_loss = 0
+            correct_predictions = 0
+            total_samples = 0
             for batch in self.train_loader:
                 image, speed, cur_gear, side_speed, input_value = batch
                 image = image.to(torch.float32)
@@ -60,7 +77,19 @@ class Trainer:
                 outputs = self.model(image)
                 # print((outputs, input_value))
                 loss = self.criterion(outputs, input_value)
+                
                 loss.backward()
                 self.optimizer.step()
+
+                running_loss += loss.item()
+
+                predictions = (outputs > 0).float()  # Assuming binary classification
+                correct_predictions += (predictions == input_value).sum().item()
+                total_samples += input_value.size(0)
+
+            accuracy = correct_predictions / total_samples
+            wandb.log({"training_loss": running_loss, "training_accuracy": accuracy})
             print(f'Epoch [{epoch+1}/{num_epochs}], Loss: {loss.item():.4f}')
             train_loss.append(loss.item())
+        
+        wandb.watch(self.model)
