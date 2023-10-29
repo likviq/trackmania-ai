@@ -23,6 +23,6 @@ class TrackmaniaAIDataset(Dataset):
         if self.transform:
             image = self.transform(image)
 
-        input_value = round(input_value, 1)
+        # input_value = round(input_value, 1)
         
         return image, speed, cur_gear, side_speed, input_value
