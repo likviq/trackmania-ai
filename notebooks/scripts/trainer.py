@@ -1,4 +1,5 @@
 import sys
+import os
 from tqdm import tqdm
 import numpy as np
 import torch
@@ -41,6 +42,7 @@ class Trainer:
         self.train_loader, self.val_loader = self.data_prep.get_train_test_dataloader()
 
         self.model = Vgg16CustomHead()
+        self.model_name = self.model._get_name()
 
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.model.to(self.device)
@@ -59,18 +61,20 @@ class Trainer:
                                                      mode='triangular', gamma=1.0,cycle_momentum=False)
 
 
-    def train(self, num_epochs=None, lr=None, wd=None, freeze_epochs=10, lr_find=False, checkpoint_location=None):
-        
+    def train(self, num_epochs=None, lr=None, wd=None, freeze_epochs=10, lr_find=False, checkpoint_location=None, save_checkpoint_path=None, model_name=None):
+        print(self.model_name)
         if num_epochs is None: num_epochs = self.num_epochs
         if lr is None: lr = self.lr
         if wd is None: wd = self.wd
+        if model_name is None: wd = self.model_name
 
         if checkpoint_location is not None:
-            # TODO: implement uploading from checkpoints
-            return
+            self.model.load_state_dict(torch.load(checkpoint_location))
         
         train_loss = []
 
+        min_running_train_loss = pow(10,3)
+        min_running_val_loss = pow(10,3)
         for epoch in tqdm(range(num_epochs)):
             running_mse_loss, running_mae_loss, running_loss = 0, 0, 0
             batch_count = 0
@@ -122,6 +126,21 @@ class Trainer:
                     running_mae_val_loss += val_mae_loss.item()
                     val_batch_count += 1
 
+            if save_checkpoint_path is not None:
+                checkpoint_path = os.path.join(save_checkpoint_path, f"{model_name}_last_epoch.pt")
+                torch.save(self.model.state_dict(), checkpoint_path)
+
+                if running_loss < min_running_train_loss:
+                    checkpoint_path = os.path.join(save_checkpoint_path, f"{model_name}_epoch_best_train_loss.pt")
+                    torch.save(self.model.state_dict(), checkpoint_path)
+
+                    min_running_train_loss = running_loss
+
+                if running_val_loss < min_running_val_loss:
+                    checkpoint_path = os.path.join(save_checkpoint_path, f"{model_name}_epoch_best_val_loss.pt")
+                    torch.save(self.model.state_dict(), checkpoint_path)
+
+                    min_running_val_loss = running_loss
 
             current_lr = self.scheduler.get_last_lr()[0]
             self.scheduler.step()
