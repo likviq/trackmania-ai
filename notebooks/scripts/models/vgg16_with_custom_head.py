@@ -15,7 +15,8 @@ class Vgg16CustomHead(nn.Module):
             nn.Linear(512 * 7 * 7, 512),
             nn.ReLU(),
             nn.BatchNorm1d(512),
-            nn.Linear(512, 1)
+            nn.Linear(512, 1),
+            nn.Tanh()
         )
 
     def forward(self, image):

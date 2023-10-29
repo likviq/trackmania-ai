@@ -1,7 +1,7 @@
 import sys
 from tqdm import tqdm
+import numpy as np
 import torch
-from torch.optim.lr_scheduler import CyclicLR
 import torch.optim as optim
 import torch.nn as nn
 from torchvision.transforms import v2
@@ -38,7 +38,7 @@ class Trainer:
         self.data_prep = DatasetPreparation(df_path=df_path, 
                                             transform=self.transform)
         
-        self.train_loader, self.test_loader = self.data_prep.get_train_test_dataloader()
+        self.train_loader, self.val_loader = self.data_prep.get_train_test_dataloader()
 
         self.model = Vgg16CustomHead()
 
@@ -51,8 +51,8 @@ class Trainer:
         self.num_epochs = 100
 
         self.wd = 0.01
-        self.lr = 0.0001
-        self.max_lr = 0.01
+        self.lr = 0.00001
+        self.max_lr = 0.001
         self.optimizer = optim.Adam(self.model.parameters(), lr=self.lr, weight_decay=self.wd)
         self.scheduler = optim.lr_scheduler.CyclicLR(optimizer=self.optimizer, base_lr=self.lr, max_lr=self.max_lr, 
                                                      step_size_up=2000, step_size_down=None, 
@@ -103,19 +103,45 @@ class Trainer:
                 print()
                 print(input_value)
 
+            with torch.no_grad():
+                running_val_loss, running_mse_val_loss, running_mae_val_loss = 0, 0, 0
+                val_batch_count = 0
+                for val_batch in self.val_loader:
+                    val_image, val_speed, val_cur_gear, val_side_speed, val_input_value = val_batch
+                    val_image = val_image.to(torch.float32)
+                    val_input_value = val_input_value.to(torch.float32)
+                    val_image, val_input_value = val_image.to(self.device), val_input_value.to(self.device)
+
+                    val_outputs = self.model(val_image)
+                    val_mse_loss = self.mse_criterion(val_outputs, val_input_value.view(len(val_input_value), 1))
+                    val_mae_loss = self.mae_criterion(outputs, input_value.view(len(input_value), 1))
+                    val_loss = (val_mse_loss + val_mae_loss)
+
+                    running_val_loss += val_loss.item()
+                    running_mse_val_loss += val_mse_loss.item()
+                    running_mae_val_loss += val_mae_loss.item()
+                    val_batch_count += 1
+
+
             current_lr = self.scheduler.get_last_lr()[0]
             self.scheduler.step()
 
-            avegare_loss = running_loss / batch_count
-            avegare_mse_loss = running_mse_loss / batch_count
-            avegare_mae_loss = running_mae_loss / batch_count
+            average_loss = running_loss / batch_count
+            average_mse_loss = running_mse_loss / batch_count
+            average_mae_loss = running_mae_loss / batch_count
 
-            wandb.log({"training_loss": running_loss, 
-                       "learning_rate": current_lr, 
-                       "Average_loss": avegare_loss,
-                       "Average_MSE_loss": avegare_mse_loss,
-                       "Average_MAE_loss": avegare_mae_loss})
-            print(f'Epoch [{epoch+1}/{num_epochs}], Loss: {avegare_loss:.4f}')
+            average_val_loss = running_val_loss / val_batch_count
+            average_mse_val_loss = running_mse_val_loss / val_batch_count
+            average_mae_val_loss = running_mae_val_loss / val_batch_count
+
+            wandb.log({"learning_rate": current_lr, 
+                       "train_loss": average_loss,
+                       "train_MSE_loss": average_mse_loss,
+                       "train_MAE_loss": average_mae_loss, 
+                       "val_loss": average_val_loss,
+                       "val_MSE_loss": average_mse_val_loss,
+                       "val_MAE_loss": average_mae_val_loss})
+            print(f'Epoch [{epoch+1}/{num_epochs}], Train loss: {average_loss:.4f}, Val loss: {average_val_loss:.4f}')
             train_loss.append(loss.item())
         
         wandb.watch(self.model)
