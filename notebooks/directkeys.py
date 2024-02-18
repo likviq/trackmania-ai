@@ -14,10 +14,10 @@ DOWN = 0xD0
 ENTER = 0x1C
 ESC = 0x01
 TWO = 0x03
+DELETE = 0x7F
 
 # C struct redefinitions
 PUL = ctypes.POINTER(ctypes.c_ulong)
-
 
 class KeyBdInput(ctypes.Structure):
     _fields_ = [("wVk", ctypes.c_ushort),
