@@ -100,13 +100,13 @@ memory = ReplayMemory(10000)
 
 steps_done = 0
 
-def select_action(state):
+def select_action(state, is_validation=False):
     global steps_done
     sample = random.random()
     eps_threshold = EPS_END + (EPS_START - EPS_END) * \
         math.exp(-1. * steps_done / EPS_DECAY)
     steps_done += 1
-    if sample > eps_threshold:
+    if is_validation == True or sample > eps_threshold:
         with torch.no_grad():
             # t.max(1) will return the largest column value of each row.
             # second column on max result is index of where max element was
@@ -158,6 +158,8 @@ def optimize_model():
     # (a final state would've been the one after which simulation ended)
     non_final_mask = torch.tensor(tuple(map(lambda s: s is not None,
                                           batch.next_state)), device=device, dtype=torch.bool)
+
+    # print(batch.next_state)
     non_final_next_states = torch.cat([s for s in batch.next_state
                                                 if s is not None])
     state_batch = torch.cat(batch.state)
@@ -199,13 +201,77 @@ else:
 
 keyboard = Controller()
 
+is_map_finished = []
 episodes_numbers = []
 episodes_rewards = []
 
-best_reward = 0
+val_is_episode_finished = []
+val_episodes_numbers = []
+val_episodes_rewards = []
 
-for i_episode in range(num_episodes):
-    # Initialize the environment and get it's state
+best_reward = pow(10,3) * (-1)
+
+iterations = 30
+epoch_in_iteration = 100
+
+for iteration in range(iterations):
+    # train iteration
+
+    for i_episode in range(epoch_in_iteration):
+        # Initialize the environment and get it's state
+        state, info = env.reset()
+        time.sleep(3)
+        state = torch.tensor(state, dtype=torch.float32, device=device).unsqueeze(0)
+        t = 0
+        start_time = time.time()
+        while True:
+            # if not check_if_tm2020_active():        #     continue
+            current_time = time.time()
+            if current_time - start_time > max_available_time:
+                # print("New epoch has started")
+                break
+            
+            action = select_action(state)
+            observation, reward, terminated, truncated, _ = env.step(action.item(), 
+                                                                    reward_time=max_available_time - (current_time - start_time))
+            # print(eward)
+            reward = torch.tensor([reward], device=device)
+            done = terminated or truncated
+
+            if terminated:
+                next_state = None
+            else:
+                next_state = torch.tensor(observation, dtype=torch.float32, device=device).unsqueeze(0)
+
+            # Store the transition in memory
+            memory.push(state, action, next_state, reward)
+
+            # Move to the next state
+            state = next_state
+
+            # Perform one step of the optimization (on the policy network)
+            optimize_model()
+
+            # Soft update of the target network's weights
+            # θ′ ← τ θ + (1 −τ )θ′
+            target_net_state_dict = target_net.state_dict()
+            policy_net_state_dict = policy_net.state_dict()
+            for key in policy_net_state_dict:
+                target_net_state_dict[key] = policy_net_state_dict[key]*TAU + target_net_state_dict[key]*(1-TAU)
+            target_net.load_state_dict(target_net_state_dict)
+
+            if done:
+                # print("episode in done")
+                is_map_finished.append(terminated)
+                episode_durations.append(t + 1)
+                episodes_numbers.append(i_episode + iteration * epoch_in_iteration)
+                episodes_rewards.append(reward)
+
+                # plot_durations()
+                break
+            t += 1
+
+    # validate models
     state, info = env.reset()
     time.sleep(3)
     state = torch.tensor(state, dtype=torch.float32, device=device).unsqueeze(0)
@@ -215,13 +281,16 @@ for i_episode in range(num_episodes):
         # if not check_if_tm2020_active():        #     continue
         current_time = time.time()
         if current_time - start_time > max_available_time:
-            print("New epoch has started")
+            val_is_episode_finished.append(False)
+            val_episodes_rewards.append(reward)
+            val_episodes_numbers.append(iteration)
             break
         
-        action = select_action(state)
+        action = select_action(state, 
+                               is_validation=True)
         observation, reward, terminated, truncated, _ = env.step(action.item(), 
                                                                  reward_time=max_available_time - (current_time - start_time))
-        print(reward)
+
         reward = torch.tensor([reward], device=device)
         done = terminated or truncated
 
@@ -236,28 +305,17 @@ for i_episode in range(num_episodes):
         # Move to the next state
         state = next_state
 
-        # Perform one step of the optimization (on the policy network)
-        optimize_model()
-
-        # Soft update of the target network's weights
-        # θ′ ← τ θ + (1 −τ )θ′
-        target_net_state_dict = target_net.state_dict()
-        policy_net_state_dict = policy_net.state_dict()
-        for key in policy_net_state_dict:
-            target_net_state_dict[key] = policy_net_state_dict[key]*TAU + target_net_state_dict[key]*(1-TAU)
-        target_net.load_state_dict(target_net_state_dict)
-
         if done:
-            print("episode in done")
-            episode_durations.append(t + 1)
-            episodes_numbers.append(i_episode)
-            episodes_rewards.append(reward)
+            print("validation episode in done")
+            val_is_episode_finished.append(terminated)
+            val_episodes_rewards.append(reward)
+            val_episodes_numbers.append(iteration)
 
             if best_reward < reward:
                 best_reward = reward
 
-                target_dqn_model_path = fr'D:\study\bachelor\github\trackmania-ai\models\rl_models\best_target_dqn_model_epoch_{i_episode}.pt'
-                policy_dqn_model_path = fr'D:\study\bachelor\github\trackmania-ai\models\rl_models\best_policy_dqn_model_epoch_{i_episode}.pt'
+                target_dqn_model_path = fr'D:\study\bachelor\github\trackmania-ai\models\rl_models\included_validation\best_target_dqn_model_epoch_{iteration}.pt'
+                policy_dqn_model_path = fr'D:\study\bachelor\github\trackmania-ai\models\rl_models\included_validation\best_policy_dqn_model_epoch_{iteration}.pt'
 
                 torch.save(target_net_state_dict, target_dqn_model_path)
                 torch.save(policy_net_state_dict, policy_dqn_model_path)
@@ -267,8 +325,14 @@ for i_episode in range(num_episodes):
         t += 1
 
 print('Complete')
+print(episode_durations)
 print(episodes_numbers)
 print(episodes_rewards)
+
+# validation
+print(val_is_episode_finished)
+print(val_episodes_rewards)
+print(val_episodes_numbers)
 # plot_durations(show_result=True)
 # plt.ioff()
 # plt.show()

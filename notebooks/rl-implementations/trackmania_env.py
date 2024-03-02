@@ -25,6 +25,7 @@ class TrackmaniaActionSpace:
 
 class TrackmaniaEnv:
     def __init__(self, num_actions):
+        self.multiplier = 100
         self.controller = Controller()
         self.action_space = TrackmaniaActionSpace(num_actions)
         self.observation = [0, 0, 0] # x, y, z 
@@ -63,7 +64,7 @@ class TrackmaniaEnv:
         self.previous_data = None
         self.previous_observation = [0, 0, 0]
 
-        print("DELETE PRESSED")
+        print("Environment reset")
 
         observation = self.observation + self.previous_observation
         return observation, self.info
@@ -91,7 +92,7 @@ class TrackmaniaEnv:
 
 
     def step(self, action, reward_time):
-        print("NEXT STEP")
+        # print("NEXT STEP")
     
         self.complete_action(action) 
 
@@ -104,9 +105,6 @@ class TrackmaniaEnv:
             except:
                 print("PROBLEM WITH JSON FILE")
                 continue
-        
-        if json_data['is_crash']:
-            self.reward -= 1
 
         if self.previous_data is not None:
             if not self.is_speed_increasing(current_speed=json_data['speed'],
@@ -121,11 +119,37 @@ class TrackmaniaEnv:
         # print(self.previous_observation)
         observation = self.observation + self.previous_observation
 
-        if json_data['is_terminated'] == True or self.is_bonk(json_data['speed']):
-            print(f"DONE: {reward_time}")
-            self.terminated = True
-            self.reward += reward_time
-            return self.observation, self.reward, self.terminated, self.truncated, self.info
+        if json_data['is_crash']:
+            self.reward -= 1
+            self.truncated = True
+
+            print(f"DONE crash, reward: {self.reward}, is_terminated: {json_data['is_terminated']}")
+
+            return observation, self.reward, self.terminated, self.truncated, self.info
+
+        is_bonk_value = self.is_bonk(json_data['speed'])
+        if json_data['is_terminated'] == True or is_bonk_value:
+            print(f"DONE, reward: {self.reward}, is_bonk: {is_bonk_value}, is_terminated: {json_data['is_terminated']}")
+
+            self.truncated = is_bonk_value
+            self.terminated = json_data['is_terminated']
+
+            if not is_bonk_value:
+                self.reward += reward_time * self.multiplier
+
+            return observation, self.reward, self.terminated, self.truncated, self.info
+        
+        
+        # if json_data['is_terminated'] == True:
+        #     print(f"DONE: {reward_time}")
+        #     self.terminated = True
+        #     self.reward += reward_time
+        #     return self.observation, self.reward, self.terminated, self.truncated, self.info
+        
+        # if self.is_bonk(json_data['speed']):
+        #     print(f"Episode truncated due to bonk: {reward_time}")
+        #     self.truncated = True
+        #     return self.observation, self.reward, self.terminated, self.truncated, self.info
 
         if json_data == self.previous_data:
             print("MISDATAAAAAAAAAAAAAAAAAAAAa")
