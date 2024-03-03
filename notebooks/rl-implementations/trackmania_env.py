@@ -25,7 +25,7 @@ class TrackmaniaActionSpace:
 
 class TrackmaniaEnv:
     def __init__(self, num_actions):
-        self.multiplier = 100
+        self.multiplier = 1
         self.controller = Controller()
         self.action_space = TrackmaniaActionSpace(num_actions)
         self.observation = [0, 0, 0] # x, y, z 

@@ -76,7 +76,7 @@ class DQN(nn.Module):
 # TAU is the update rate of the target network
 # LR is the learning rate of the ``AdamW`` optimizer
 BATCH_SIZE = 32
-GAMMA = 0.99
+GAMMA = 1
 EPS_START = 0.9
 EPS_END = 0.05
 EPS_DECAY = 1000
@@ -209,7 +209,7 @@ val_is_episode_finished = []
 val_episodes_numbers = []
 val_episodes_rewards = []
 
-best_reward = pow(10,3) * (-1)
+best_reward = pow(10,7) * (-1)
 
 iterations = 30
 epoch_in_iteration = 100
@@ -311,14 +311,14 @@ for iteration in range(iterations):
             val_episodes_rewards.append(reward)
             val_episodes_numbers.append(iteration)
 
-            if best_reward < reward:
-                best_reward = reward
+            # if best_reward < reward:
+            # best_reward = reward
 
-                target_dqn_model_path = fr'D:\study\bachelor\github\trackmania-ai\models\rl_models\included_validation\best_target_dqn_model_epoch_{iteration}.pt'
-                policy_dqn_model_path = fr'D:\study\bachelor\github\trackmania-ai\models\rl_models\included_validation\best_policy_dqn_model_epoch_{iteration}.pt'
+            target_dqn_model_path = fr'D:\study\bachelor\github\trackmania-ai\models\rl_models\03.03.24\best_target_dqn_model_epoch_{iteration}.pt'
+            policy_dqn_model_path = fr'D:\study\bachelor\github\trackmania-ai\models\rl_models\included_validation\best_policy_dqn_model_epoch_{iteration}.pt'
 
-                torch.save(target_net_state_dict, target_dqn_model_path)
-                torch.save(policy_net_state_dict, policy_dqn_model_path)
+            torch.save(target_net_state_dict, target_dqn_model_path)
+            torch.save(policy_net_state_dict, policy_dqn_model_path)
 
             # plot_durations()
             break
