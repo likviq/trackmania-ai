@@ -36,8 +36,8 @@ n_observations = len(state)
 policy_net = DQN(n_observations, n_actions).to(device)
 target_net = DQN(n_observations, n_actions).to(device)
 
-policy_net_state_dict = torch.load(r'D:\study\bachelor\github\trackmania-ai\models\rl_models\included_validation\best_policy_dqn_model_epoch_0.pt')
-target_net_state_dict = torch.load(r'D:\study\bachelor\github\trackmania-ai\models\rl_models\included_validation\best_target_dqn_model_epoch_0.pt')
+policy_net_state_dict = torch.load(r'D:\study\bachelor\github\trackmania-ai\models\rl_models\03.03.24_without_punishments\best_policy_dqn_model_epoch_9.pt')
+target_net_state_dict = torch.load(r'D:\study\bachelor\github\trackmania-ai\models\rl_models\03.03.24_without_punishments\best_target_dqn_model_epoch_9.pt')
 
 policy_net.load_state_dict(policy_net_state_dict)
 target_net.load_state_dict(target_net_state_dict)
@@ -84,4 +84,4 @@ while True:
 
     previous_observation = currect_observation
 
-    # time.sleep(3)
+    time.sleep(0.5)

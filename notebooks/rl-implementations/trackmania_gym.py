@@ -211,8 +211,8 @@ val_episodes_rewards = []
 
 best_reward = pow(10,7) * (-1)
 
-iterations = 30
-epoch_in_iteration = 100
+iterations = 60
+epoch_in_iteration = 70
 
 for iteration in range(iterations):
     # train iteration
@@ -234,7 +234,7 @@ for iteration in range(iterations):
             action = select_action(state)
             observation, reward, terminated, truncated, _ = env.step(action.item(), 
                                                                     reward_time=max_available_time - (current_time - start_time))
-            # print(eward)
+            # print(reward)
             reward = torch.tensor([reward], device=device)
             done = terminated or truncated
 
@@ -261,11 +261,12 @@ for iteration in range(iterations):
             target_net.load_state_dict(target_net_state_dict)
 
             if done:
+                print(f"episode: {i_episode + iteration * epoch_in_iteration}, reward: {reward.item()}, time: {current_time - start_time}")
                 # print("episode in done")
                 is_map_finished.append(terminated)
                 episode_durations.append(t + 1)
                 episodes_numbers.append(i_episode + iteration * epoch_in_iteration)
-                episodes_rewards.append(reward)
+                episodes_rewards.append(reward.item())
 
                 # plot_durations()
                 break
@@ -314,8 +315,8 @@ for iteration in range(iterations):
             # if best_reward < reward:
             # best_reward = reward
 
-            target_dqn_model_path = fr'D:\study\bachelor\github\trackmania-ai\models\rl_models\03.03.24\best_target_dqn_model_epoch_{iteration}.pt'
-            policy_dqn_model_path = fr'D:\study\bachelor\github\trackmania-ai\models\rl_models\included_validation\best_policy_dqn_model_epoch_{iteration}.pt'
+            target_dqn_model_path = fr'D:\study\bachelor\github\trackmania-ai\models\rl_models\03.03.24_without_punishments\best_target_dqn_model_epoch_{iteration}.pt'
+            policy_dqn_model_path = fr'D:\study\bachelor\github\trackmania-ai\models\rl_models\03.03.24_without_punishments\best_policy_dqn_model_epoch_{iteration}.pt'
 
             torch.save(target_net_state_dict, target_dqn_model_path)
             torch.save(policy_net_state_dict, policy_dqn_model_path)

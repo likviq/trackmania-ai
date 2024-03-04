@@ -109,7 +109,8 @@ class TrackmaniaEnv:
         if self.previous_data is not None:
             if not self.is_speed_increasing(current_speed=json_data['speed'],
                                             previous_speed=self.previous_data['speed']):
-                self.reward -= 0.5
+                # self.reward -= 0.5
+                self.reward -= 0
 
         self.observation[0] = json_data['carPositionRight']
         self.observation[1] = json_data['carPositionLeft']
@@ -120,7 +121,7 @@ class TrackmaniaEnv:
         observation = self.observation + self.previous_observation
 
         if json_data['is_crash']:
-            self.reward -= 1
+            # self.reward -= 1
             self.truncated = True
 
             print(f"DONE crash, reward: {self.reward}, is_terminated: {json_data['is_terminated']}")
