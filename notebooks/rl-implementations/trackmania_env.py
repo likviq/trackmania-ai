@@ -25,7 +25,7 @@ class TrackmaniaActionSpace:
 
 class TrackmaniaEnv:
     def __init__(self, num_actions):
-        self.multiplier = 1
+        self.multiplier = 10
         self.controller = Controller()
         self.action_space = TrackmaniaActionSpace(num_actions)
         self.observation = [0, 0, 0] # x, y, z 
@@ -64,6 +64,9 @@ class TrackmaniaEnv:
         self.previous_data = None
         self.previous_observation = [0, 0, 0]
 
+        self.previous_time_speed = 0
+        self.rewards_for_time = 0
+
         print("Environment reset")
 
         observation = self.observation + self.previous_observation
@@ -91,7 +94,7 @@ class TrackmaniaEnv:
         return False
 
 
-    def step(self, action, reward_time):
+    def step(self, action, reward_time, current_time):
         # print("NEXT STEP")
     
         self.complete_action(action) 
@@ -111,6 +114,11 @@ class TrackmaniaEnv:
                                             previous_speed=self.previous_data['speed']):
                 # self.reward -= 0.5
                 self.reward -= 0
+
+        if int(current_time) // 3 > self.rewards_for_time:
+            self.rewards_for_time = int(current_time) // 3
+        
+        self.reward = self.rewards_for_time
 
         self.observation[0] = json_data['carPositionRight']
         self.observation[1] = json_data['carPositionLeft']

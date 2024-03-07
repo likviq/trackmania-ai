@@ -8,6 +8,7 @@ from collections import namedtuple, deque
 from itertools import count
 from pynput.keyboard import Controller
 
+import wandb
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -15,6 +16,24 @@ import torch.nn.functional as F
 
 from utils import get_active_window_process_id, get_process_id_by_name, check_if_tm2020_active
 from trackmania_env import TrackmaniaEnv
+
+def init_wandb_env():
+        wandb.init(
+        # set the wandb project where this run will be logged
+        project="trackmania-rl-experiments",
+        
+        # track hyperparameters and run metadata
+        config={
+        "BATCH_SIZE": 32,
+        "GAMMA": 1,
+        "EPS_START": 0.9,
+        "EPS_END": 1000,
+        "TAU": 0.005,
+        "LR": 1e-4,
+        "n_observations": 6,
+        "actions": 3
+        }
+    )
 
 while True:
     if check_if_tm2020_active():
@@ -213,9 +232,16 @@ best_reward = pow(10,7) * (-1)
 
 iterations = 60
 epoch_in_iteration = 70
+val_epoch_in_iteration = 10
+
+init_wandb_env()
 
 for iteration in range(iterations):
     # train iteration
+
+    successful_finishes_per_epoch = 0
+    total_finish_time_per_epoch = 0
+    average_reward_per_epoch = 0
 
     for i_episode in range(epoch_in_iteration):
         # Initialize the environment and get it's state
@@ -233,13 +259,16 @@ for iteration in range(iterations):
             
             action = select_action(state)
             observation, reward, terminated, truncated, _ = env.step(action.item(), 
-                                                                    reward_time=max_available_time - (current_time - start_time))
+                                                                     reward_time=max_available_time - (current_time - start_time),
+                                                                     current_time=(current_time - start_time))
             # print(reward)
             reward = torch.tensor([reward], device=device)
             done = terminated or truncated
 
             if terminated:
                 next_state = None
+                successful_finishes_per_epoch += 1
+                total_finish_time_per_epoch += current_time - start_time
             else:
                 next_state = torch.tensor(observation, dtype=torch.float32, device=device).unsqueeze(0)
 
@@ -261,6 +290,7 @@ for iteration in range(iterations):
             target_net.load_state_dict(target_net_state_dict)
 
             if done:
+                average_reward_per_epoch += reward.item()
                 print(f"episode: {i_episode + iteration * epoch_in_iteration}, reward: {reward.item()}, time: {current_time - start_time}")
                 # print("episode in done")
                 is_map_finished.append(terminated)
@@ -272,58 +302,89 @@ for iteration in range(iterations):
                 break
             t += 1
 
-    # validate models
-    state, info = env.reset()
-    time.sleep(3)
-    state = torch.tensor(state, dtype=torch.float32, device=device).unsqueeze(0)
-    t = 0
-    start_time = time.time()
-    while True:
-        # if not check_if_tm2020_active():        #     continue
-        current_time = time.time()
-        if current_time - start_time > max_available_time:
-            val_is_episode_finished.append(False)
-            val_episodes_rewards.append(reward)
-            val_episodes_numbers.append(iteration)
-            break
-        
-        action = select_action(state, 
-                               is_validation=True)
-        observation, reward, terminated, truncated, _ = env.step(action.item(), 
-                                                                 reward_time=max_available_time - (current_time - start_time))
+    if successful_finishes_per_epoch != 0:
+        average_finish_time_per_epoch = total_finish_time_per_epoch / successful_finishes_per_epoch
+    else:
+        average_finish_time_per_epoch = 0
 
-        reward = torch.tensor([reward], device=device)
-        done = terminated or truncated
+    
 
-        if terminated:
-            next_state = None
-        else:
-            next_state = torch.tensor(observation, dtype=torch.float32, device=device).unsqueeze(0)
+    val_successful_finishes_per_epoch = 0
+    val_total_finish_time_per_epoch = 0
+    val_average_reward_per_epoch = 0
 
-        # Store the transition in memory
-        memory.push(state, action, next_state, reward)
+    for i_episode in range(val_epoch_in_iteration):
+        # validate models
+        state, info = env.reset()
+        time.sleep(3)
+        state = torch.tensor(state, dtype=torch.float32, device=device).unsqueeze(0)
+        t = 0
+        start_time = time.time()
+        while True:
+            # if not check_if_tm2020_active():        #     continue
+            current_time = time.time()
+            if current_time - start_time > max_available_time:
+                val_is_episode_finished.append(False)
+                val_episodes_rewards.append(reward)
+                val_episodes_numbers.append(iteration)
+                break
+            
+            action = select_action(state, 
+                                is_validation=True)
+            observation, reward, terminated, truncated, _ = env.step(action.item(), 
+                                                                    reward_time=max_available_time - (current_time - start_time),
+                                                                    current_time=(current_time - start_time))
 
-        # Move to the next state
-        state = next_state
+            reward = torch.tensor([reward], device=device)
+            done = terminated or truncated
 
-        if done:
-            print("validation episode in done")
-            val_is_episode_finished.append(terminated)
-            val_episodes_rewards.append(reward)
-            val_episodes_numbers.append(iteration)
+            if terminated:
+                next_state = None
+                val_successful_finishes_per_epoch += 1
+                val_total_finish_time_per_epoch += current_time - start_time
+            else:
+                next_state = torch.tensor(observation, dtype=torch.float32, device=device).unsqueeze(0)
 
-            # if best_reward < reward:
-            # best_reward = reward
+            # Store the transition in memory
+            memory.push(state, action, next_state, reward)
 
-            target_dqn_model_path = fr'D:\study\bachelor\github\trackmania-ai\models\rl_models\03.03.24_without_punishments\best_target_dqn_model_epoch_{iteration}.pt'
-            policy_dqn_model_path = fr'D:\study\bachelor\github\trackmania-ai\models\rl_models\03.03.24_without_punishments\best_policy_dqn_model_epoch_{iteration}.pt'
+            # Move to the next state
+            state = next_state
 
-            torch.save(target_net_state_dict, target_dqn_model_path)
-            torch.save(policy_net_state_dict, policy_dqn_model_path)
+            if done:
+                val_average_reward_per_epoch += reward.item()
+                print("validation episode in done")
+                val_is_episode_finished.append(terminated)
+                val_episodes_rewards.append(reward)
+                val_episodes_numbers.append(iteration)
 
-            # plot_durations()
-            break
-        t += 1
+                # if best_reward < reward:
+                # best_reward = reward
+
+                target_dqn_model_path = fr'D:\study\bachelor\github\trackmania-ai\models\rl_models\07.03.24_with_rewards_for_each_3_seconds\best_target_dqn_model_epoch_{iteration}.pt'
+                policy_dqn_model_path = fr'D:\study\bachelor\github\trackmania-ai\models\rl_models\07.03.24_with_rewards_for_each_3_seconds\best_policy_dqn_model_epoch_{iteration}.pt'
+
+                torch.save(target_net_state_dict, target_dqn_model_path)
+                torch.save(policy_net_state_dict, policy_dqn_model_path)
+
+                # plot_durations()
+                break
+            t += 1
+
+    if val_successful_finishes_per_epoch != 0:
+        val_average_finish_time_per_epoch = val_total_finish_time_per_epoch / val_successful_finishes_per_epoch
+    else:
+        val_average_finish_time_per_epoch = 0
+
+    wandb.log({"train/successful_finishes_per_epoch": successful_finishes_per_epoch, 
+               "train/total_finish_time_per_epoch": total_finish_time_per_epoch,
+               "train/average_reward_per_epoch": average_reward_per_epoch,
+               "train/average_finish_time_per_epoch": average_finish_time_per_epoch,
+               "val/successful_finishes_per_epoch": val_successful_finishes_per_epoch, 
+               "val/total_finish_time_per_epoch": val_total_finish_time_per_epoch,
+               "val/average_reward_per_epoch": val_average_reward_per_epoch,
+               "val/average_finish_time_per_epoch": val_average_finish_time_per_epoch,
+               })
 
 print('Complete')
 print(episode_durations)
